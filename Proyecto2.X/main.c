@@ -44,6 +44,7 @@ uint8_t boton1 = 0, boton2 = 0, boton3 = 0;
 uint8_t cont, ban;
 unsigned char estado = 0, direccion = 0;
 unsigned char val1, val2, val3, val4;
+//Registro de 3 localidades diferentes para cada potenciometro
 unsigned char gpot1[3] = {0x03, 0x04, 0x05};
 unsigned char gpot2[3] = {0x06, 0x07, 0x08};
 unsigned char gpot3[3] = {0x09, 0x0A, 0x0B};
@@ -59,8 +60,11 @@ uint8_t readEEPROM(uint8_t address);
 void writeEEPROM(uint8_t data, uint8_t address);
 void EEPROM(void);
 void mandar(unsigned char *cadena);
-
+/**************************************************
+ Interrupciones
+ ***************************************************/
 void __interrupt() isr(void){
+     //Interrupciones ADC
     if (PIR1bits.ADIF){
         if (ADCON0bits.CHS == 0){
             CCPR1L = (ADRESH >> 1) + 35;
@@ -80,7 +84,7 @@ void __interrupt() isr(void){
         }
         PIR1bits.ADIF = 0;
     }
-    
+    //Interrupciones timer0
     if (INTCONbits.T0IF){
         cont++;
         if (cont == pot3)
@@ -103,6 +107,7 @@ void main (void){
     setup();
     ADCON0bits.GO = 1;
     while(1){
+     //contador modos
         if (PORTBbits.RB0 == 1){
             estado = estado + 1;
             while(PORTBbits.RB0 == 1){;}
@@ -117,21 +122,24 @@ void main (void){
         if(estado <= 0){
             estado = 1;
         }
+        //direcciona a control de servos con potenciometros
         if(estado == 1){
             PORTD = 1;
             ADCON0bits.ADON = 1;
         }
+        //direcciona a control memoria EEPROM
         if(estado == 2){
             PORTD = 2;
             EEPROM();
         }
+       //direcciona a comunicación serial (No funcionó)
         if(estado == 3){
             PORTD = 3;
             ADCON0bits.ADON = 0;
             serial();
         }
         __delay_us(50);
-        
+        //Cambio de entrada analógica del ADC de los 4 potenciometros
         if (ADCON0bits.GO == 0){
             switch (ADCON0bits.CHS){
                 case (0):
@@ -171,7 +179,7 @@ void setup(void){
     TRISB = 0B0111;
     
     OPTION_REGbits.nRBPU = 0;
-    
+    //encender pull-ups internos
     WPUB = 0b1111111;
     TRISCbits.TRISC3 = 0;
     TRISCbits.TRISC4 = 0;
@@ -180,10 +188,10 @@ void setup(void){
     PORTB = 0;
     PORTA = 0;
     PORTC = 0;
-    
+    //Configuración oscilador
     OSCCONbits.IRCF = 0b0110;
     OSCCONbits.SCS = 1;
-    
+    //Configuración timer0
     OPTION_REGbits.T0CS = 0;
     OPTION_REGbits.T0SE = 0;
     OPTION_REGbits.PSA = 0;
@@ -194,7 +202,7 @@ void setup(void){
     
     INTCONbits.T0IF = 0;
     INTCONbits.T0IE = 1;
-    
+    //Configuración ADC
     ADCON0bits.ADCS = 0b10;
     ADCON0bits.CHS = 0;
     ADCON1bits.ADFM = 0;
@@ -214,7 +222,7 @@ void setup(void){
     
     CCPR2L = 0x0F;
     CCP2CONbits.DC2B0 = 0;
-    
+    //Configuración timer2 para PWM
     PIR1bits.TMR2IF = 0;
     T2CONbits.T2CKPS = 0b11;
     
@@ -247,7 +255,10 @@ void setup(void){
     RCSTAbits.CREN = 1;
     return;
 }
-
+/**************************************************
+ Función enviar texto
+ ***************************************************/
+//transformar texto para enviar por comunicación seria (No funcionó)
 void mandar(unsigned char *cadena){
     while(*cadena != '\0'){
         while(TXIF != 1);
@@ -255,7 +266,10 @@ void mandar(unsigned char *cadena){
         *cadena++;
     }
 }
-
+/**************************************************
+ Función señales del timer0
+ ***************************************************/
+//Por medio de esta función se calculaba la señal del timer 0 por medio del potenciometro
 unsigned char mapeo(unsigned char pot){
     unsigned char tmr0reset;
     if (pot <= 13)
@@ -299,7 +313,9 @@ unsigned char mapeo(unsigned char pot){
     
     return tmr0reset;
 }
-
+/**************************************************
+ Función comunicación serial
+ ***************************************************/
 void serial(void){
     while(RCIF == 0){;}
     if(opcion_pot == 0){
@@ -340,7 +356,9 @@ void serial(void){
         opcion_pot = 0;
     }
 }
-
+/**************************************************
+ Función escribir EEPROM
+ ***************************************************/
 void writeEEPROM(uint8_t data, uint8_t address){
     EEADR = address;
     EEDAT = data;
@@ -362,6 +380,9 @@ void writeEEPROM(uint8_t data, uint8_t address){
     return;
 }
 
+/**************************************************
+ Función leer EEPROM
+ ***************************************************/
 uint8_t readEEPROM(uint8_t address){
     EEADR = address;
     EECON1bits.EEPGD = 0;
@@ -370,7 +391,11 @@ uint8_t readEEPROM(uint8_t address){
     return data;
 }
 
+/**************************************************
+ Función EEPROM
+ ***************************************************/
 void EEPROM(void){
+    //Contador de registros
     if (PORTBbits.RB4 == 1){
             direccion = direccion + 1;
             while(!PORTBbits.RB4){;}
@@ -383,6 +408,7 @@ void EEPROM(void){
             direccion = 3;
         }
     PORTE = direccion;
+    //Se llama a la función writeEEPROM cuando se tiene presiona el boton 2
     if(PORTBbits.RB2 == 0){
         boton2 = 1;}
         PORTAbits.RA6 = 0;
@@ -390,6 +416,7 @@ void EEPROM(void){
         PORTAbits.RA6 = 1;
         PORTAbits.RA7 = 0;
         ADCON0bits.ADON = 1;
+       //dependiendo del contador de direccion este escribira en diferentes localidades
         writeEEPROM(CCPR1L, gpot1[direccion]);
         writeEEPROM(CCPR2L, gpot2[direccion]);
         writeEEPROM(pot3, gpot3[direccion]);
@@ -397,6 +424,7 @@ void EEPROM(void){
         __delay_ms(500);
         boton2 = 0;
     }
+    //Se llama a la función de llamar el readEEPROM cuando se presiona el boton 3
     if (PORTBbits.RB3 == 0){
         boton3 = 1;}
         PORTAbits.RA7 = 0;
@@ -404,6 +432,7 @@ void EEPROM(void){
         PORTAbits.RA6 = 0;
         PORTAbits.RA7 = 1;
         ADCON0bits.ADON = 0;
+     //dependiendo del contador de direccion este leerá de diferentes localidades
         val1 = readEEPROM(gpot1[direccion]);
         val2 = readEEPROM(gpot2[direccion]);
         val3 = readEEPROM(gpot3[direccion]);
